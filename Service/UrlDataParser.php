@@ -15,9 +15,6 @@ class UrlDataParser
     /** @var  array $juxtapositions */
     private $juxtapositions = [];
 
-    /** @var  string $modifiedData */
-    private $modifiedData = '';
-
     /** @var array $replacementLog */
     private $replacementLog = [];
 
@@ -73,23 +70,6 @@ class UrlDataParser
     {
         $this->juxtapositions = $juxtapositions;
     }
-
-    /**
-     * @return string
-     */
-    public function getModifiedData()
-    {
-        return $this->modifiedData;
-    }
-
-    /**
-     * @param string $modifiedData
-     */
-    public function setModifiedData($modifiedData)
-    {
-        $this->modifiedData = $modifiedData;
-    }
-
 
     /**
      * @return array
@@ -192,6 +172,9 @@ class UrlDataParser
 
         foreach ($this->getJuxtapositions() as $search => $substitute) {
             preg_match($search, $data, $matches, PREG_OFFSET_CAPTURE);
+
+            unset($matches[0]);
+
             $replacements[] = [
                 'search' => $matches,
                 'substitute' => $substitute,
@@ -199,14 +182,31 @@ class UrlDataParser
             $data = preg_replace('/' . $search . '/m', $substitute, $data, -1, $count);
         }
 
-        $this->setUrlData($data);
-        $this->addReplacementsLog($replacements);
+        if (!$this->detectLooping($replacements)) {
+            $this->setUrlData($data);
+            $this->addReplacementsLog($replacements);
+        }
 
         if ($count !== 0) {
             $this->replace();
         }
 
         return true;
+    }
+
+    /**
+     * @param $replacements
+     * @return bool
+     */
+    private function detectLooping($replacements)
+    {
+        foreach ($this->getReplacementLog() as $log) {
+            if ($replacements === $log) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -218,8 +218,16 @@ class UrlDataParser
         $this->setReplacementLog($log);
     }
 
+    /**
+     * @return bool
+     */
     public function recover()
     {
-        $dataBackUpper = new UrlDataBackUpper($this->getUrl(), $this->getModifiedData());
+        $dataBackUpper = new UrlDataBackUpper();
+        $dataBackUpper->setUrlData($this->getUrlData());
+        $dataBackUpper->setReplacementLog($this->getReplacementLog());
+        $this->setUrlData($dataBackUpper->replaceBack());
+
+        return true;
     }
 }
